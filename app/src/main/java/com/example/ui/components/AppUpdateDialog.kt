@@ -57,6 +57,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.BuildConfig
 import com.example.ui.theme.CozySage
+import androidx.compose.ui.platform.LocalContext
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.content.ClipboardManager
+import android.content.ClipData
 import com.example.ui.theme.WarmAmberPrimary
 import com.example.util.AppVersionInfo
 import com.example.util.UpdateCheckResult
@@ -76,6 +82,7 @@ fun AppUpdateDialog(
     val versionInfo = updateCheckResult?.latestVersion ?: return
     val currentVersionName = BuildConfig.VERSION_NAME
     val currentVersionCode = BuildConfig.VERSION_CODE
+    val context = LocalContext.current
 
     AlertDialog(
         onDismissRequest = {
@@ -254,13 +261,57 @@ fun AppUpdateDialog(
                         }
                     }
                     is UpdateDownloadState.Error -> {
-                        Text(
-                            text = "⚠️ 下载出现异常: ${downloadState.message}",
-                            style = MaterialTheme.typography.bodySmall.copy(
-                                color = MaterialTheme.colorScheme.error,
-                                fontWeight = FontWeight.Medium
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            Text(
+                                text = "⚠️ 国内直连 GitHub 偶发超时: ${downloadState.message}",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = MaterialTheme.colorScheme.error,
+                                    fontWeight = FontWeight.Medium
+                                )
                             )
-                        )
+                            Spacer(modifier = Modifier.height(10.dp))
+                            val fastMirrorUrl = if (versionInfo.downloadUrl.contains("github.com")) {
+                                "https://ghfast.top/${versionInfo.downloadUrl}"
+                            } else {
+                                versionInfo.downloadUrl
+                            }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = {
+                                        try {
+                                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                            clipboard?.setPrimaryClip(ClipData.newPlainText("APK Download URL", fastMirrorUrl))
+                                            Toast.makeText(context, "已复制国内极速下载链接", Toast.LENGTH_SHORT).show()
+                                        } catch (e: Exception) {
+                                            // ignore
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("复制极速链接", style = MaterialTheme.typography.labelSmall)
+                                }
+                                Button(
+                                    onClick = {
+                                        try {
+                                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(fastMirrorUrl))
+                                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            context.startActivity(intent)
+                                        } catch (e: Exception) {
+                                            Toast.makeText(context, "打开浏览器失败", Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = CozySage),
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    Text("浏览器极速下载", style = MaterialTheme.typography.labelSmall)
+                                }
+                            }
+                        }
                     }
                     else -> {
                         Text(

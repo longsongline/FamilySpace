@@ -324,62 +324,91 @@ class AppUpdateManager(private val context: Context) {
     }
 
     /**
-     * Downloads APK file and reports progress
+     * Downloads APK file and reports progress with automatic domestic mirror fallbacks
      */
     suspend fun downloadApk(
         downloadUrl: String,
         onProgress: (Float, Double, Double) -> Unit
     ): Result<File> = withContext(Dispatchers.IO) {
-        try {
-            val request = Request.Builder()
-                .url(downloadUrl)
-                .addHeader("User-Agent", "FamilySpace-Android-App")
-                .build()
-
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) {
-                return@withContext Result.failure(IOException("下载失败，HTTP状态码: ${response.code}"))
+        val candidateUrls = mutableListOf<String>()
+        if (downloadUrl.startsWith("http://") || downloadUrl.startsWith("https://")) {
+            if (downloadUrl.contains("github.com") && downloadUrl.contains("/releases/download/")) {
+                // High-speed domestic acceleration mirrors
+                candidateUrls.add("https://ghfast.top/$downloadUrl")
+                candidateUrls.add("https://ghproxy.net/$downloadUrl")
+                candidateUrls.add("https://mirror.ghproxy.com/$downloadUrl")
             }
-
-            val body = response.body ?: return@withContext Result.failure(IOException("响应数据为空"))
-            val totalBytes = body.contentLength()
-
-            // Save in app-specific download folder
-            val downloadDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.cacheDir
-            if (!downloadDir.exists()) downloadDir.mkdirs()
-
-            val targetFile = File(downloadDir, "family_space_latest_update.apk")
-            if (targetFile.exists()) targetFile.delete()
-
-            body.byteStream().use { input ->
-                FileOutputStream(targetFile).use { output ->
-                    val buffer = ByteArray(8 * 1024)
-                    var bytesRead: Int
-                    var totalRead = 0L
-
-                    while (input.read(buffer).also { bytesRead = it } != -1) {
-                        output.write(buffer, 0, bytesRead)
-                        totalRead += bytesRead
-
-                        val progress = if (totalBytes > 0) totalRead.toFloat() / totalBytes else 0f
-                        val downloadedMb = totalRead / (1024.0 * 1024.0)
-                        val totalMb = if (totalBytes > 0) totalBytes / (1024.0 * 1024.0) else downloadedMb
-
-                        onProgress(progress, downloadedMb, totalMb)
-                    }
-                    output.flush()
-                }
-            }
-
-            if (!targetFile.exists() || targetFile.length() <= 0) {
-                return@withContext Result.failure(IOException("安装包写入异常"))
-            }
-
-            Result.success(targetFile)
-        } catch (e: Exception) {
-            Log.e(TAG, "downloadApk failed", e)
-            Result.failure(e)
+            candidateUrls.add(downloadUrl)
+        } else {
+            candidateUrls.add(downloadUrl)
         }
+
+        var lastException: Exception? = null
+
+        for (candidateUrl in candidateUrls) {
+            try {
+                Log.d(TAG, "Attempting to download APK from: $candidateUrl")
+                val request = Request.Builder()
+                    .url(candidateUrl)
+                    .addHeader("User-Agent", "FamilySpace-Android-App")
+                    .build()
+
+                val response = client.newCall(request).execute()
+                if (!response.isSuccessful) {
+                    response.close()
+                    lastException = IOException("下载失败，HTTP状态码: ${response.code}")
+                    continue
+                }
+
+                val body = response.body ?: run {
+                    lastException = IOException("响应数据为空")
+                    return@run null
+                }
+                if (body == null) continue
+
+                val totalBytes = body.contentLength()
+
+                // Save in app-specific download folder
+                val downloadDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.cacheDir
+                if (!downloadDir.exists()) downloadDir.mkdirs()
+
+                val targetFile = File(downloadDir, "family_space_latest_update.apk")
+                if (targetFile.exists()) targetFile.delete()
+
+                body.byteStream().use { input ->
+                    FileOutputStream(targetFile).use { output ->
+                        val buffer = ByteArray(8 * 1024)
+                        var bytesRead: Int
+                        var totalRead = 0L
+
+                        while (input.read(buffer).also { bytesRead = it } != -1) {
+                            output.write(buffer, 0, bytesRead)
+                            totalRead += bytesRead
+
+                            val progress = if (totalBytes > 0) totalRead.toFloat() / totalBytes else 0f
+                            val downloadedMb = totalRead / (1024.0 * 1024.0)
+                            val totalMb = if (totalBytes > 0) totalBytes / (1024.0 * 1024.0) else downloadedMb
+
+                            onProgress(progress, downloadedMb, totalMb)
+                        }
+                        output.flush()
+                    }
+                }
+
+                if (!targetFile.exists() || targetFile.length() <= 0) {
+                    lastException = IOException("安装包写入异常")
+                    continue
+                }
+
+                return@withContext Result.success(targetFile)
+            } catch (e: Exception) {
+                Log.w(TAG, "Download attempt failed for $candidateUrl", e)
+                lastException = e
+            }
+        }
+
+        Log.e(TAG, "All candidate download URLs failed", lastException)
+        Result.failure(lastException ?: IOException("所有下载节点连接超时，请检查网络"))
     }
 
     /**
