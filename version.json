@@ -1,0 +1,9 @@
+{
+  "versionCode": 2,
+  "versionName": "1.1.0",
+  "downloadUrl": "https://github.com/longsongline/FamilySpace/releases/latest/download/app-release.apk",
+  "releaseTitle": "亲情空间 v1.1.0 后台静默位置守护版",
+  "releaseNotes": "1. 新增后台静默位置守护服务（手机锁屏/息屏/切后台无需打开App自动测距同步）\n2. 新增出租房电子围栏自动安全到家报平安\n3. 新增系统电池优化与自启动保活一键配置引导\n4. 优化 GitHub/Gist 多端云同步实时性",
+  "apkSizeMb": 18.5,
+  "isForceUpdate": false
+}

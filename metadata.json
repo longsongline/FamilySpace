@@ -1,0 +1,8 @@
+{
+  "name": "亲情空间",
+  "description": "专为家人打造的私人亲情空间：父母生日与节日倒计时、回家次数与打卡、合照聚餐时光轴、亲情通话记录、今日心情与出租屋到家安全自动报平安提醒。",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
